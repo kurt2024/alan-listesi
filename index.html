@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acil Servis Alan Dağıtım Sistemi</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#4f46e5">
+
+    <!-- Web Çıktısı İçin Kütüphaneler -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <!-- Mobil Çıktı (APK) İçin Capacitor Eklentileri -->
+    <script src="https://cdn.jsdelivr.net/npm/@capacitor/core@5.0.0/dist/capacitor.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@capacitor/filesystem@5.0.0/dist/plugin.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@capacitor/share@5.0.0/dist/plugin.js"></script>
+
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --excel-color: #10b981;
+            --pdf-color: #ef4444;
+            --bg-gradient: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            --panel-bg: rgba(255, 255, 255, 0.95);
+            --text: #1e293b;
+            --border: #cbd5e1;
+            --weekend-bg: #fef08a;
+            --holiday-bg: #fecaca;
+            --sari-alan: #fef9c3;
+            --yesil-alan: #dcfce7;
+            --musahade-alan: #e0f2fe;
+            --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        }
+
+        * { box-sizing: border-box; font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        
+        body { background: var(--bg-gradient); color: var(--text); margin: 0; padding: 30px 20px; min-height: 100vh; }
+
+        .container { max-width: 1300px; margin: 0 auto; animation: fadeIn 0.6s ease-out; }
+        
+        h1 { text-align: center; color: var(--primary); font-size: 2.2rem; margin-bottom: 20px; text-shadow: 1px 1px 2px rgba(0,0,0,0.05); }
+
+        .settings-bar {
+            display: flex; gap: 20px; background: white; padding: 15px 25px; border-radius: 12px; margin-bottom: 25px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); align-items: center; flex-wrap: wrap; justify-content: center;
+        }
+        
+        .color-picker { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 0.9rem;}
+        input[type="color"] { border: none; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; padding: 0; background: transparent; }
+        input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+        input[type="color"]::-webkit-color-swatch { border: 2px solid var(--border); border-radius: 5px; }
+
+        .controls {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 25px; background: var(--panel-bg); 
+            padding: 30px; border-radius: 16px; box-shadow: var(--shadow); margin-bottom: 25px; backdrop-filter: blur(10px);
+        }
+
+        .control-group { display: flex; flex-direction: column; gap: 12px; }
+        label { font-weight: 600; font-size: 0.95rem; color: #475569; }
+        
+        input, select, button { padding: 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 1rem; transition: all 0.3s ease; }
+        input:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2); }
+        
+        button { background-color: var(--primary); color: white; border: none; cursor: pointer; font-weight: 600; }
+        button:hover { background-color: var(--primary-hover); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3); }
+        button:active { transform: translateY(0); }
+
+        .personnel-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--border); padding: 15px; border-radius: 8px; background: #f8fafc; }
+        .person-item { 
+            display: flex; justify-content: space-between; align-items: center; padding: 10px; margin-bottom: 8px;
+            background: white; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); border: 1px solid #e2e8f0; animation: slideIn 0.3s ease-out forwards;
+        }
+        
+        .tag { font-size: 0.75rem; padding: 4px 8px; border-radius: 12px; margin-left: 5px; font-weight: 600; letter-spacing: 0.5px; }
+        .tag.izin { background: #fef08a; color: #854d0e; }
+        .tag.rapor { background: #fecaca; color: #991b1b; }
+        
+        .clear-btn { background-color: #64748b; padding: 8px 12px; font-size: 0.85rem; margin-top: 10px; }
+        .clear-btn:hover { background-color: #475569; }
+
+        /* MODAL TASARIMI */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 1000;
+            align-items: center; justify-content: center; animation: fadeIn 0.3s ease-out;
+        }
+
+        .modal-content {
+            background-color: #ffffff; width: 98%; max-width: 1300px; max-height: 90vh; border-radius: 16px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); display: flex; flex-direction: column;
+            animation: modalScaleUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); overflow: hidden;
+        }
+
+        .modal-header { padding: 20px 25px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background-color: #f8fafc; }
+        .modal-header h2 { margin: 0; color: var(--primary); font-size: 1.5rem; }
+        .close-btn { background: none; border: none; font-size: 2rem; color: #64748b; cursor: pointer; padding: 0; line-height: 1; box-shadow: none; }
+        .close-btn:hover { color: #ef4444; background: none; transform: scale(1.1); box-shadow: none;}
+
+        .modal-body { padding: 25px; overflow-y: auto; background-color: #ffffff; }
+        .modal-footer { padding: 20px 25px; border-top: 1px solid var(--border); background-color: #f8fafc; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; }
+
+        .btn-excel { background-color: var(--excel-color); font-size: 1.05rem; padding: 12px 24px; border-radius: 8px;}
+        .btn-excel:hover { background-color: #059669; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); }
+        .btn-pdf { background-color: var(--pdf-color); font-size: 1.05rem; padding: 12px 24px; border-radius: 8px;}
+        .btn-pdf:hover { background-color: #dc2626; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3); }
+
+        table { width: 100%; border-collapse: collapse; border: 1px solid var(--border); border-radius: 8px; }
+        th, td { border: 1px solid var(--border); padding: 10px; text-align: left; font-size: 0.95rem; }
+        th { background-color: var(--primary); color: white; font-weight: 600; text-align: center; }
+        
+        /* Alan Renklendirmeleri */
+        .td-sari { background-color: var(--sari-alan); }
+        .td-yesil { background-color: var(--yesil-alan); }
+        .td-musahade { background-color: var(--musahade-alan); }
+
+        tr:hover:not(.weekend):not(.holiday) { background-color: #f1f5f9; }
+        .weekend { background-color: var(--weekend-bg) !important; }
+        .holiday { background-color: var(--holiday-bg) !important; }
+        
+        .stats-box { margin-top: 20px; padding: 15px; border-radius: 8px; font-size: 0.95rem; line-height: 1.6; border: 1px solid var(--border); }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes modalScaleUp { from { opacity: 0; transform: scale(0.95) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+
+        @media (max-width: 900px) { .controls { grid-template-columns: 1fr; } .modal-footer, .settings-bar { flex-direction: column; } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🏥 Acil Servis Alan Dağıtım Sistemi</h1>
+
+    <div class="settings-bar">
+        <span style="color:#64748b; font-weight:bold;">🎨 Tablo Renk Ayarları:</span>
+        <div class="color-picker">
+            <input type="color" id="weekendColor" value="#fef08a" onchange="updateColors()">
+            <label for="weekendColor" style="margin:0; cursor:pointer;">Hafta Sonu</label>
+        </div>
+        <div class="color-picker">
+            <input type="color" id="holidayColor" value="#fecaca" onchange="updateColors()">
+            <label for="holidayColor" style="margin:0; cursor:pointer;">Resmi Tatil</label>
+        </div>
+    </div>
+
+    <div class="controls">
+        <div class="control-group">
+            <label>📅 Yıl ve Ay Seçimi:</label>
+            <input type="month" id="monthInput" required>
+            
+            <label>🏖️ Resmi Tatil Günleri (Örn: 1,23,29):</label>
+            <input type="text" id="holidays" placeholder="Sadece gün sayılarını virgülle yazın...">
+
+            <button onclick="generateSchedule()" style="margin-top: 15px; padding: 15px; font-size: 1.1rem;">🚀 Alan Listesini Oluştur</button>
+        </div>
+
+        <div class="control-group">
+            <label>👥 Personel Havuzu (Min. 18 Kişi Önerilir):</label>
+            <div style="display: flex; gap: 8px;">
+                <input type="text" id="personName" placeholder="Ad Soyad girin..." style="flex: 1;">
+                <button onclick="addPerson()">Ekle</button>
+            </div>
+            
+            <label>📝 Mazeret Tanımla (Maks 5 Gün):</label>
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <select id="personSelect" style="flex: 1;"></select>
+                <input type="number" id="excuseDay" placeholder="Gün" min="1" max="31" style="width: 80px;">
+                <select id="excuseType">
+                    <option value="izin">İzin</option>
+                    <option value="rapor">Rapor</option>
+                </select>
+                <button onclick="addExcuse()">İşle</button>
+            </div>
+
+            <div class="personnel-list" id="personnelListUI"></div>
+            <button class="clear-btn" onclick="clearData()">🗑️ Tüm Personeli Temizle</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="previewModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Acil Servis Alan Listesi</h2>
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+        </div>
+        
+        <div class="modal-body" id="modalPrintArea">
+            <h2 id="tableTitle" style="text-align: center; color: #1e293b; margin-bottom: 20px; font-family: sans-serif;"></h2>
+            <table id="scheduleTable">
+                <thead>
+                    <tr>
+                        <th style="width: 10%;">Tarih</th>
+                        <th style="width: 12%;">Gün</th>
+                        <th style="width: 26%; background-color: #eab308; color: white;">Sarı Alan (Ekip Başı Dahil)</th>
+                        <th style="width: 26%; background-color: #22c55e; color: white;">Yeşil Alan (Enjeksiyon, Triyaj, Aracı)</th>
+                        <th style="width: 26%; background-color: #3b82f6; color: white;">Müşahade Alanı</th>
+                    </tr>
+                </thead>
+                <tbody id="scheduleBody"></tbody>
+            </table>
+            <div id="statsContainer" class="stats-box"></div>
+        </div>
+
+        <div class="modal-footer">
+            <button class="btn-excel" onclick="exportToExcel()">📊 Excel (Kaydet / Paylaş)</button>
+            <button class="btn-pdf" onclick="exportToPDF()">📄 PDF (Kaydet / Paylaş)</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Yerel depolama anahtarı, diğer sistemle karışmaması için 'acilAlanNobetData' olarak ayarlandı
+    let personnel = JSON.parse(localStorage.getItem('acilAlanNobetData')) || [];
+    let savedColors = JSON.parse(localStorage.getItem('acilAlanColors')) || { weekend: '#fef08a', holiday: '#fecaca' };
+    const SHIFT_SIZE = 9;
+    const MAX_EXCUSE_DAYS = 5;
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const trTime = new Date(new Date().toLocaleString("en-US", {timeZone: "Europe/Istanbul"}));
+        document.getElementById('monthInput').value = `${trTime.getFullYear()}-${String(trTime.getMonth() + 1).padStart(2, '0')}`;
+        document.getElementById('weekendColor').value = savedColors.weekend;
+        document.getElementById('holidayColor').value = savedColors.holiday;
+        applyColors(savedColors.weekend, savedColors.holiday);
+        updatePersonnelUI();
+    });
+
+    function updateColors() {
+        const wColor = document.getElementById('weekendColor').value;
+        const hColor = document.getElementById('holidayColor').value;
+        applyColors(wColor, hColor);
+        localStorage.setItem('acilAlanColors', JSON.stringify({ weekend: wColor, holiday: hColor }));
+    }
+    
+    function applyColors(w, h) { 
+        document.documentElement.style.setProperty('--weekend-bg', w); 
+        document.documentElement.style.setProperty('--holiday-bg', h); 
+    }
+    
+    function openModal() { document.getElementById('previewModal').style.display = 'flex'; }
+    function closeModal() { document.getElementById('previewModal').style.display = 'none'; }
+    window.onclick = function(e) { if (e.target === document.getElementById('previewModal')) closeModal(); }
+    function saveData() { localStorage.setItem('acilAlanNobetData', JSON.stringify(personnel)); }
+
+    function clearData() {
+        if(confirm("Tüm personel ve izin kayıtları silinecek. Emin misiniz?")) { personnel = []; saveData(); updatePersonnelUI(); }
+    }
+
+    function addPerson() {
+        const nameInput = document.getElementById('personName');
+        const name = nameInput.value.trim();
+        if (name && !personnel.find(p => p.name === name)) {
+            personnel.push({ name: name, excuses: {}, shiftCount: 0 }); nameInput.value = ''; updatePersonnelUI();
+        } else { alert("Lütfen geçerli ve benzersiz bir isim girin."); }
+    }
+
+    function addExcuse() {
+        const personName = document.getElementById('personSelect').value;
+        const day = parseInt(document.getElementById('excuseDay').value);
+        const type = document.getElementById('excuseType').value;
+        if (!personName || isNaN(day) || day < 1 || day > 31) return alert("Geçerli bir gün girin.");
+        
+        const person = personnel.find(p => p.name === personName);
+        if (person) {
+            if (Object.keys(person.excuses).length >= MAX_EXCUSE_DAYS && !person.excuses[day]) {
+                alert(`⚠️ Maksimum izin sınırına (${MAX_EXCUSE_DAYS} gün) ulaşıldı!`); return;
+            }
+            person.excuses[day] = type; document.getElementById('excuseDay').value = ''; updatePersonnelUI();
+        }
+    }
+
+    function updatePersonnelUI() {
+        const listUI = document.getElementById('personnelListUI'); const select = document.getElementById('personSelect');
+        listUI.innerHTML = ''; select.innerHTML = '';
+        personnel.forEach(p => {
+            let option = document.createElement('option'); option.value = p.name; option.textContent = p.name; select.appendChild(option);
+            let excusesHTML = Object.entries(p.excuses).map(([d, t]) => `<span class="tag ${t}">${d}.Gün (${t})</span>`).join('');
+            listUI.innerHTML += `<div class="person-item"><span><strong>${p.name}</strong> ${excusesHTML}</span><button onclick="removePerson('${p.name}')" style="padding: 4px 8px; font-size: 12px; background: #ef4444; border-radius:4px;">Sil</button></div>`;
+        });
+        saveData();
+    }
+
+    function removePerson(name) { personnel = personnel.filter(p => p.name !== name); updatePersonnelUI(); }
+
+    function generateSchedule() {
+        const monthInput = document.getElementById('monthInput').value;
+        if (!monthInput || personnel.length < SHIFT_SIZE) return alert(`Ay seçimi yapın ve sisteme en az ${SHIFT_SIZE} personel ekleyin.`);
+        const [year, month] = monthInput.split('-'); const daysInMonth = new Date(year, month, 0).getDate();
+        const holidays = document.getElementById('holidays').value.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
+
+        personnel.forEach(p => p.shiftCount = 0);
+        const tbody = document.getElementById('scheduleBody'); tbody.innerHTML = '';
+        document.getElementById('tableTitle').innerText = `${year} Yılı ${month}. Ay Acil Servis Alan Dağıtım Listesi`;
+
+        let previousDayStaff = [];
+        for (let day = 1; day <= daysInMonth; day++) {
+            const currentDate = new Date(year, month - 1, day);
+            const dayOfWeek = currentDate.getDay();
+            const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
+            let rowClass = holidays.includes(day) ? "holiday" : (isWeekend ? "weekend" : "");
+            
+            let availableStaff = personnel.filter(p => !p.excuses[day]);
+            if (availableStaff.length < SHIFT_SIZE) return alert(`${day}. gün için müsait yeterli personel yok!`);
+
+            // Peş peşe nöbet tutanları ayırma ve adil dağıtım için sıralama
+            let idealStaff = availableStaff.filter(p => !previousDayStaff.includes(p.name)).sort(() => Math.random() - 0.5).sort((a, b) => a.shiftCount - b.shiftCount);
+            let nonIdealStaff = availableStaff.filter(p => previousDayStaff.includes(p.name)).sort(() => Math.random() - 0.5).sort((a, b) => a.shiftCount - b.shiftCount);
+            
+            // O günün 9 nöbetçisini belirle
+            let selectedStaff = idealStaff.length >= SHIFT_SIZE ? idealStaff.slice(0, SHIFT_SIZE) : [...idealStaff, ...nonIdealStaff.slice(0, SHIFT_SIZE - idealStaff.length)];
+            
+            // Seçilenlerin nöbet sayısını artır ve yarına hazırlık için kaydet
+            selectedStaff.forEach(p => p.shiftCount++);
+            previousDayStaff = selectedStaff.map(p => p.name);
+
+            // ALAN DAĞITIMI: Seçilen 9 kişiyi kimse sürekli aynı alana düşmesin diye tekrar karıştır (Fisher-Yates)
+            let shuffledForZones = [...selectedStaff].sort(() => Math.random() - 0.5);
+
+            // 3'erli gruplara böl
+            let sariAlan = shuffledForZones.slice(0, 3).map(p => p.name).join("<br>• ");
+            let yesilAlan = shuffledForZones.slice(3, 6).map(p => p.name).join("<br>• ");
+            let musahade = shuffledForZones.slice(6, 9).map(p => p.name).join("<br>• ");
+            
+            const dateStr = currentDate.toLocaleDateString('tr-TR', { weekday: 'long' });
+
+            tbody.innerHTML += `
+                <tr class="${rowClass}">
+                    <td><strong>${day}.${month}.${year}</strong></td>
+                    <td>${dateStr}</td>
+                    <td class="td-sari">• ${sariAlan}</td>
+                    <td class="td-yesil">• ${yesilAlan}</td>
+                    <td class="td-musahade">• ${musahade}</td>
+                </tr>
+            `;
+        }
+
+        let statsHTML = "<strong style='color:var(--primary); font-size:1.1rem;'>📊 Aylık Toplam Nöbet Dağılımı:</strong><br><br>";
+        personnel.sort((a, b) => b.shiftCount - a.shiftCount).forEach(p => {
+            statsHTML += `<span style="display:inline-block; margin-right:15px; margin-bottom:10px; background:#f1f5f9; padding:5px 10px; border-radius:6px; border:1px solid #cbd5e1;">${p.name}: <b style="color:var(--primary);">${p.shiftCount}</b></span>`;
+        });
+        document.getElementById('statsContainer').innerHTML = statsHTML;
+        openModal();
+    }
+
+    // NATIVE MOBIL PAYLAŞIM ALGORİTMASI
+    async function saveAndShareNative(base64Data, fileName, mimeType) {
+        try {
+            const Filesystem = Capacitor.Plugins.Filesystem;
+            const Share = Capacitor.Plugins.Share;
+            
+            const savedFile = await Filesystem.writeFile({
+                path: fileName,
+                data: base64Data,
+                directory: 'CACHE' 
+            });
+            
+            await Share.share({
+                title: fileName,
+                text: 'Alan nöbet listesi oluşturuldu. İstediğiniz uygulamaya gönderebilirsiniz.',
+                url: savedFile.uri,
+                dialogTitle: 'Dosyayı Paylaş / Kaydet'
+            });
+        } catch (error) {
+            alert("Paylaşım başlatılırken hata oluştu: " + error.message);
+        }
+    }
+
+    function exportToExcel() {
+        let table = document.getElementById("scheduleTable");
+        let wb = XLSX.utils.table_to_book(table, { sheet: "Alan Listesi" });
+        const fileName = `Acil_Alan_Listesi_${document.getElementById('monthInput').value}.xlsx`;
+
+        if (window.Capacitor && window.Capacitor.isNative) {
+            const base64 = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
+            saveAndShareNative(base64, fileName, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        } else {
+            XLSX.writeFile(wb, fileName);
+        }
+    }
+
+    function exportToPDF() {
+        const element = document.getElementById('modalPrintArea');
+        const fileName = `Acil_Alan_Listesi_${document.getElementById('monthInput').value}.pdf`;
+        
+        const opt = {
+            margin: 5, filename: fileName, image: { type: 'jpeg', quality: 1.0 },
+            html2canvas: { scale: 3, useCORS: true, backgroundColor: '#ffffff' },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } // İstenirse 'landscape' yapılabilir
+        };
+
+        if (window.Capacitor && window.Capacitor.isNative) {
+            html2pdf().set(opt).from(element).outputPdf('datauristring').then(function(pdfAsString) {
+                const base64 = pdfAsString.split('base64,')[1];
+                saveAndShareNative(base64, fileName, 'application/pdf');
+            });
+        } else {
+            html2pdf().set(opt).from(element).save();
+        }
+    }
+</script>
+
+</body>
+</html>
