@@ -1,0 +1,6 @@
+{
+  "appId": "com.acilalan.app",
+  "appName": "Alan Listesi",
+  "webDir": "www",
+  "bundledWebRuntime": false
+}
